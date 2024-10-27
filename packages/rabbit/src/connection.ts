@@ -1,10 +1,11 @@
-import { Connection, Options, connect as connectToRabbit } from 'amqplib';
+import { ConfirmChannel, Connection, Options, connect as connectToRabbit } from 'amqplib';
 
 export type RabbitMQConnectionOptions = {url: string} | (Options.Connect & {url?: never});
 
 export interface RabbitMQConnection {
   connect: () => Promise<void>;
-  connection: Connection;
+  connection: Connection | null;
+  channel: ConfirmChannel | null;
 }
 
 export const mapConnectionOptionsToUrl = (connectionOptions: RabbitMQConnectionOptions): string | Options.Connect => {
@@ -16,22 +17,29 @@ export const mapConnectionOptionsToUrl = (connectionOptions: RabbitMQConnectionO
 }
 
 export const createRabbitConnection = (connectionOptions: RabbitMQConnectionOptions): RabbitMQConnection => {
-  let connection: Connection;
+  let connection: Connection | null = null;
+  let channel: ConfirmChannel | null = null;
 
   const connect = async () => {
+    if (connection && channel) {
+      throw new Error('Already connected!');
+    }
+
     const url = mapConnectionOptionsToUrl(connectionOptions);
 
     connection = await connectToRabbit(url);
+    channel = await connection.createConfirmChannel();
+
+    // TODO: Reconnect mechanism.
   }
 
   return {
     connect,
-    get connection () {
-      if (!connection) {
-        throw new Error('In order to have a connection you need to connect first!');
-      }
-
+    get connection() {
       return connection;
+    },
+    get channel() {
+      return channel;
     }
   }
 }

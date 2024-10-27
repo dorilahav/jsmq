@@ -18,8 +18,6 @@ describe('mapConnectionOptionsToUrl', () => {
 });
 
 describe('createRabbitConnection', () => {
-
-
   describe('connect', () => {
     it('calls rabbitmq connect once', async () => {
       const connection = createRabbitConnection({url: 'amqp://user:pass@host:10000/vhost'})
@@ -27,6 +25,13 @@ describe('createRabbitConnection', () => {
 
       expect(connect as jest.Mock).toHaveBeenCalledTimes(1);
     });
+
+    it('throws an exception if already connected', async () => {
+      const connection = createRabbitConnection({url: 'amqp://user:pass@host:10000/vhost'});
+      await connection.connect();
+
+      await expect(connection.connect).rejects.toThrow();
+    })
   })
 
   describe('connection', () => {
@@ -36,14 +41,33 @@ describe('createRabbitConnection', () => {
       connection = createRabbitConnection({url: 'amqp://user:pass@host:10000/vhost'});
     });
 
-    it('throws an error if didnt call connect before', () => {
-      expect(() => connection.connection).toThrow(Error);
+    it('returns null before calling connect', () => {
+      expect(connection.connection).toBeNull();
     });
 
-    it('returns connection value if did call connect before', async () => {
+    it('returns a connection after calling connect', async () => {
       await connection.connect();
 
-      expect(connection.connection).toBeDefined();
+      expect(connection.connection).not.toBeNull();
     })
-  })
-})
+  });
+
+  describe('channel', () => {
+    let connection: RabbitMQConnection;
+
+    beforeEach(() => {
+      connection = createRabbitConnection({url: 'amqp://user:pass@host:10000/vhost'});
+    });
+
+    it('returns null before calling connect', () => {
+      expect(connection.channel).toBeNull();
+    });
+
+    it('returns a channel after calling connect', async () => {
+      await connection.connect();
+
+      expect(connection.channel).not.toBeNull();
+    })
+  });
+
+});
