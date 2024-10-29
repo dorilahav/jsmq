@@ -29,7 +29,7 @@ export interface RabbitMQDeclarations {
   consumers: Array<ConsumerDeclaration>;
 }
 
-interface DeclarationBuilderFunctions {
+export interface DeclarationBuilderFunctions {
   declareExchange: (options: ExchangeDeclaration) => DeclarationBuilderFunctions;
   declareQueue: (options: QueueDeclaration) => DeclarationBuilderFunctions;
   bindExchangeToExchange: (options: ExchangeBindingDeclaration) => DeclarationBuilderFunctions;
