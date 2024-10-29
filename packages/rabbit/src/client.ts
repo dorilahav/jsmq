@@ -1,4 +1,5 @@
 import { MQBrokerClient } from '@jsmq/core';
+import { applyDeclarations } from './apply-declarations';
 import { createRabbitConnection, RabbitMQConnection, RabbitMQConnectionOptions } from './connection';
 import { DeclareFunction, RabbitMQDeclarationBuilder } from './declarations';
 
@@ -23,24 +24,11 @@ export class RabbitMQClient extends MQBrokerClient {
   }
 
   async applyDeclarations() {
-    const {
-      exchanges,
-      queues,
-      exchangeBindings,
-      queueBindings,
-      consumers
-    } = this.declarations.build();
+    const declarations = this.declarations.build();
 
     if (!this.connection.channel) {
       return;
     }
-
-    const channel = this.connection.channel;
-
-    await Promise.all(exchanges.map(d => channel.assertExchange(d.name, 'fanout', {durable: true})));
-    await Promise.all(queues.map(d => channel.assertQueue(d.name, {durable: true})));
-    await Promise.all(exchangeBindings.map(d => channel.bindExchange(d.targetExchange, d.sourceExchange, '')));
-    await Promise.all(queueBindings.map(d => channel.bindQueue(d.targetQueue, d.sourceExchange, '')));
-    await Promise.all(consumers.map(d => channel.consume(d.queueName, d.consumer)));
+    await applyDeclarations(this.connection.channel, declarations);
   }
 }
