@@ -1,0 +1,4 @@
+Initially, I thought of creating a library that will introduce a unified way of using queues in different architectures.
+There are plenty of libraries like this in C# like MassTransit, NServiceBus, CAP etc.
+Thinking more about this option, I wasn't sure that I actually wanted to create a unified language for using all message queuing solutions as they give different features to deal with message routing.
+For example, RabbitMQ uses exchanges to publish and route messages to different queues, this concept doesn't exist in redis and when creating a unified API I would need to somehow abstract exchanges out of it.
