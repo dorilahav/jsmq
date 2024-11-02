@@ -2,3 +2,8 @@ Initially, I thought of creating a library that will introduce a unified way of 
 There are plenty of libraries like this in C# like MassTransit, NServiceBus, CAP etc.
 Thinking more about this option, I wasn't sure that I actually wanted to create a unified language for using all message queuing solutions as they give different features to deal with message routing.
 For example, RabbitMQ uses exchanges to publish and route messages to different queues, this concept doesn't exist in redis and when creating a unified API I would need to somehow abstract exchanges out of it.
+
+While creating many apps, I was seeing the same problem again and again. When trying to separate logic I needed to always pass down the client.
+Another problem was ensuring excanges and queues exist near where my consumer logic is present (in my code).
+In order to tackle this problem, I created a declarative model where you can declare exchanges and queues right near where you publish and consume messages in your code.
+This declaration model can be used using the #declare function in RabbitMQClient.
