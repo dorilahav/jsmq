@@ -7,3 +7,14 @@ While creating many apps, I was seeing the same problem again and again. When tr
 Another problem was ensuring excanges and queues exist near where my consumer logic is present (in my code).
 In order to tackle this problem, I created a declarative model where you can declare exchanges and queues right near where you publish and consume messages in your code.
 This declaration model can be used using the #declare function in RabbitMQClient.
+
+After creating declaration logic, I started searching for best practices about connection and channels
+https://www.cloudamqp.com/blog/part4-rabbitmq-13-common-errors.html
+
+I settled on a per consumer channel (and one channel for publishing) model.
+https://groups.google.com/g/rabbitmq-users/c/2amI_a0cVxM
+
+Maybe I should make it configurable (or choose automatically relying on the amount of consumers)? (choosing one consumer per channel or multiple consumers per channel).
+
+Handle reconnections:
+https://www.rabbitmq.com/docs/consumers#connection-recovery
