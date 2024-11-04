@@ -1,19 +1,38 @@
-import { connect } from 'amqplib';
-import { createControlledChannel } from './controlled-channel';
+import { ConfirmChannel } from 'amqplib';
+import { createDurableConnection } from './durable-connection';
 
 const main = async () => {
-  const connection = await connect('amqp://localhost:5672');
-  const channel = await createControlledChannel(
-    connection,
-    (error) => {
-      console.error(error);
-    },
-    () => {
-      console.log('channel opened!');
-    }
-  );
+  let channel: ConfirmChannel;
 
-  channel.get().publish('shit', '', Buffer.from(''));
+  const connection = await createDurableConnection('amqp://localhost:5672', {
+    onReconnectAttempt: () => {
+      console.log('Attempting reconnect...')
+    },
+    onReconnectSuccessful: async (connection) => {
+      channel = await connection.createConfirmChannel();
+      console.log('connection reconnected!');
+    },
+    onReconnectFailure: () => {
+      console.warn('Reconnect failure');
+    },
+    onError: (error) => {
+      console.error('connection error');
+    },
+    onClose: () => {
+      console.log('connection closed');
+    }
+  });
+
+  channel = await connection.get().createConfirmChannel();
+
+  channel.on('error', error => {
+    console.error('channel error!');
+    console.error(error);
+  });
+
+  channel.publish('shit', '', Buffer.from(''));
+
+  await connection.close();
 }
 
 main()
