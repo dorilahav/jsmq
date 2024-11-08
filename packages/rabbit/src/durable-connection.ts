@@ -1,91 +1,122 @@
 import { Connection, Options, connect as connectToRabbit } from 'amqplib';
+import { EventEmitter } from 'events';
 
 const RECONNECT_DELAY_MS = 5000;
 const RECONNECT_LIMIT: number = 10;
 
 export type DurableConnectionUrl = string | Options.Connect;
 
-interface DurableConnectionEvents {
-  onReconnectAttempt?: () => void;
-  onReconnectSuccessful?: (connection: Connection) => void;
-  onReconnectFailure?: () => void;
-  onError?: (error: Error) => void;
-  onClose?: () => void;
+export interface IDurableConnection {
+  get: () => Promise<Connection>;
+  close: () => Promise<void>;
 }
 
-export const createDurableConnection = async (url: DurableConnectionUrl, events: DurableConnectionEvents = {}) => {
-  let isCloseCalled = false;
-  let connection: Connection;
-  let reconnectionFailureCount = 0;
-  let reconnectionTimeout: NodeJS.Timeout | null = null;
+interface DurableConnectionOptions {
+  url: DurableConnectionUrl;
+  eventEmitterOptions?: {
+    captureRejections?: boolean | undefined;
+  };
+}
 
-  const reconnect = () => new Promise<Connection>((resolve, reject) => {
-    reconnectionTimeout = setTimeout(async () => {
-      events.onReconnectAttempt?.();
+interface DurableConnectionEventMap {
+  'reconnect-attempt': [];
+  'reconnect-success': [connection: Connection];
+  'reconnect-failed': [];
+  error: [error: Error];
+  close: [];
+}
 
-      try {
-        const connection = await connect();
-        events.onReconnectSuccessful?.(connection);
-        resolve(connection);
-      } catch (error) {
-        events.onReconnectFailure?.();
-        reject(error);
-      }
-    }, RECONNECT_DELAY_MS);
-  })
+export class DurableConnection extends EventEmitter<DurableConnectionEventMap> implements IDurableConnection {
+  private url: DurableConnectionUrl;
 
-  const reconnectUntilFailure = () => new Promise<Connection>(async (resolve, reject) => {
-    while (RECONNECT_LIMIT === -1 ? true : reconnectionFailureCount < RECONNECT_LIMIT) {
-      try {
-        const connection = await reconnect();
-        reconnectionFailureCount = 0;
-        resolve(connection);
-        return;
-      } catch {
-        reconnectionFailureCount++;
-        continue;
-      }
-    }
+  private isCloseCalled: boolean;
+  private connection: Connection | null;
 
-    reject(new Error('Reconnection limit passed!'));
-  });
+  private reconnectionFailureCount: number;
+  private reconnectionTimeout: NodeJS.Timeout | null;
 
-  const bindEvents = (connection: Connection) => {
-    if (events.onError) {
-      connection.on('error', events.onError);
-    }
+  constructor(options: DurableConnectionOptions) {
+    super(options.eventEmitterOptions);
+    
+    this.url = options.url;
 
-    connection.on('close', () => {
-      events.onClose?.();
-      if (!isCloseCalled) {
-        reconnectUntilFailure();
-      }
-    });
+    this.isCloseCalled = false;
+    this.connection = null;
+
+    this.reconnectionFailureCount = 0;
+    this.reconnectionTimeout = null;
   }
 
-  const connect = async () => {
-    const connection = await connectToRabbit(url);
+  public async get() {
+    if (!this.connection) {
+      this.connection = await this.createConnection();
+    }
 
-    bindEvents(connection);
+    return this.connection;
+  }
+
+  public async close() {
+    this.isCloseCalled = true;
+
+    if (this.reconnectionTimeout) {
+      clearTimeout(this.reconnectionTimeout);
+    } else {
+      await this.connection?.close();
+    }
+  }
+
+  private async createConnection() {
+    const connection = await connectToRabbit(this.url);
+
+    this.bindEvents(connection);
 
     return connection;
   }
 
-  // Well initializing the connection is not more than just connecting, it doesn't trigger reconnect logic because we want the app to crash if not immediately connected to rabbit.
-  const initializeConnection = connect;
+  private bindEvents(connection: Connection) {
+    connection.on('error', error => this.emit('error', error));
 
-  connection = await initializeConnection();
+    connection.on('close', () => {
+      this.emit('close');
 
-  return {
-    get: () => connection,
-    close: async () => {
-      isCloseCalled = true;
-
-      if (reconnectionTimeout) {
-        clearTimeout(reconnectionTimeout);
-      } else {
-        await connection.close();
+      if (!this.isCloseCalled) {
+        this.reconnectUntilFailure();
       }
-    }
+    });
+  }
+
+  private reconnectUntilFailure() {
+    return new Promise<Connection>(async (resolve, reject) => {
+      while (RECONNECT_LIMIT === -1 ? true : this.reconnectionFailureCount < RECONNECT_LIMIT) {
+        try {
+          const connection = await this.reconnect();
+          this.reconnectionFailureCount = 0;
+          resolve(connection);
+          return;
+        } catch {
+          this.reconnectionFailureCount++;
+          continue;
+        }
+      }
+
+      reject(new Error('Reconnection limit passed!'));
+    });
+  }
+
+  private reconnect() {
+    return new Promise<Connection>((resolve, reject) => {
+      this.reconnectionTimeout = setTimeout(async () => {
+        this.emit('reconnect-attempt');
+
+        try {
+          const connection = await this.createConnection();
+          this.emit('reconnect-success', connection);
+          resolve(connection);
+        } catch (error) {
+          this.emit('reconnect-failed');
+          reject(error);
+        }
+      }, RECONNECT_DELAY_MS);
+    });
   }
 }

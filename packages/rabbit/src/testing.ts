@@ -1,38 +1,27 @@
-import { ConfirmChannel } from 'amqplib';
-import { createDurableConnection } from './durable-connection';
+import { ChannelPool } from './channel-pool';
+import { DurableConnection } from './durable-connection';
 
 const main = async () => {
-  let channel: ConfirmChannel;
+  const connection = new DurableConnection({ url: 'amqp://localhost:5672' });
 
-  const connection = await createDurableConnection('amqp://localhost:5672', {
-    onReconnectAttempt: () => {
-      console.log('Attempting reconnect...')
-    },
-    onReconnectSuccessful: async (connection) => {
-      channel = await connection.createConfirmChannel();
-      console.log('connection reconnected!');
-    },
-    onReconnectFailure: () => {
-      console.warn('Reconnect failure');
-    },
-    onError: (error) => {
-      console.error('connection error');
-    },
-    onClose: () => {
-      console.log('connection closed');
-    }
-  });
+  connection.on('reconnect-attempt', () => console.log('Attempting reconnect...'));
+  connection.on('reconnect-success', () => console.log('Connection restored!'));
+  connection.on('reconnect-failed', () => console.log('Reconnection failed!'));
+  connection.on('error', () => console.log('Connection error'));
+  connection.on('close', () => console.log('Connection closed'));
 
-  channel = await connection.get().createConfirmChannel();
+  const pool = new ChannelPool(connection, { maxSize: 2 });
 
-  channel.on('error', error => {
-    console.error('channel error!');
-    console.error(error);
-  });
+  const res1 = await pool.aquire();
+  res1.channel.publish('pdf-requested', '', Buffer.from('{}'));
+  pool.release(res1);
 
-  channel.publish('shit', '', Buffer.from(''));
+  const res2 = await pool.aquire();
+  res2.channel.publish('pdf-requested', '', Buffer.from('{}'));
+  // await res2.channel.close();
 
-  await connection.close();
+  const res3 = await pool.aquire();
+  res3.channel.publish('pdf-requested', '', Buffer.from('{}'));
 }
 
 main()
