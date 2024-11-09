@@ -12,15 +12,15 @@ const main = async () => {
 
   const pool = new ChannelPool(connection, { maxSize: 2 });
 
-  const res1 = await pool.aquire();
+  const res1 = await pool.acquire();
   res1.channel.publish('pdf-requested', '', Buffer.from('{}'));
-  pool.release(res1);
+  pool.release(res1.id);
 
-  const res2 = await pool.aquire();
+  const res2 = await pool.acquire();
   res2.channel.publish('pdf-requested', '', Buffer.from('{}'));
   // await res2.channel.close();
 
-  const res3 = await pool.aquire();
+  const res3 = await pool.acquire();
   res3.channel.publish('pdf-requested', '', Buffer.from('{}'));
 }
 

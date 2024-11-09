@@ -3,7 +3,7 @@ import { IDurableConnection } from './durable-connection';
 
 /**
  * ChannelPool(connection, size):
- *  aquire channel:
+ *  acquire channel:
  *    if has free channel:
  *      return free channel
  *    else
@@ -43,17 +43,18 @@ export interface ChannelPoolOptions {
   maxSize?: number;
 }
 
-export interface Channel {
+export interface AcquireChannelResponse {
   id: string;
   channel: ConfirmChannel;
 }
 
-interface Pool<T> {
-  aquire: () => Promise<T>;
-  release: (item: T) => void;
+interface IChannelPool<T> {
+  acquire: () => Promise<T>;
+  release: (id: string) => void;
+  size: number;
 }
 
-export class ChannelPool implements Pool<Channel> {
+export class ChannelPool implements IChannelPool<AcquireChannelResponse> {
   private maxSize: number;
 
   private connection: IDurableConnection;
@@ -68,7 +69,11 @@ export class ChannelPool implements Pool<Channel> {
     this.freeChannels = [];
   }
 
-  public async aquire(): Promise<Channel> {
+  public get size() {
+    return this.channelsMap.size;
+  }
+
+  public async acquire(): Promise<AcquireChannelResponse> {
     const freeChannel = this.popFreeChannel();
 
     if (freeChannel != null) {
@@ -79,18 +84,18 @@ export class ChannelPool implements Pool<Channel> {
       throw new Error(); // TODO: throw another error.
     }
 
-    return await this.createAquiredChannel();
+    return await this.createAcquiredChannel();
   }
 
-  public release(channel: Channel) {
-    if (this.freeChannels.includes(channel.id)) {
+  public release(id: string) {
+    if (this.freeChannels.includes(id)) {
       throw new Error(); // TODO: throw another error.
     }
 
-    this.freeChannels.push(channel.id);
+    this.freeChannels.push(id);
   }
 
-  private popFreeChannel(): Channel | null {
+  private popFreeChannel(): AcquireChannelResponse | null {
     const channelId = this.freeChannels.pop();
 
     if (channelId === undefined) {
@@ -103,7 +108,7 @@ export class ChannelPool implements Pool<Channel> {
     };
   }
 
-  private async createAquiredChannel(): Promise<Channel> {
+  private async createAcquiredChannel(): Promise<AcquireChannelResponse> {
     const connection = await this.connection.get();
     const channel = await connection.createConfirmChannel();
 
@@ -122,7 +127,7 @@ export class ChannelPool implements Pool<Channel> {
 
     return {
       id: channelId,
-      channel
+      channel: channel
     };
   }
 }
